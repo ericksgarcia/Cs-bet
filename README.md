@@ -72,11 +72,28 @@ A API normalmente não expõe a ordem do veto antes do jogo, então é **configu
 - A API key fica embutida no HTML (necessário no navegador); para uso público,
   prefira um proxy server-side.
 
+## Explorador de dados (`explorer.html`)
+
+Como a estrutura exata dos campos da API só dá pra confirmar fazendo a chamada
+real, há uma ferramenta de diagnóstico: abra `explorer.html`, clique em
+**Buscar tudo** e ela:
+
+- Chama `/matches`, `/teams`, `/team_map_pool` e `/match_maps` (5 requisições,
+  respeitando o limite com fila de ~13s).
+- Mostra o **JSON cru** e a **lista de campos** de cada item.
+- Faz uma **checagem ✓/✗** dizendo se cada campo que o modelo precisa existe (e
+  com qual nome).
+- Permite **exportar** tudo num `cs2-api-dump.json`.
+
+Use isso para validar os nomes reais e, se algo vier diferente, é só ajustar o
+mapeamento defensivo no `index.html`.
+
 ## Estrutura
 
 ```
-index.html   # app completo: UI + coleta + simulação de veto + modelo
-README.md    # esta documentação
+index.html      # app de previsão: UI + coleta + simulação de veto + modelo
+explorer.html   # diagnóstico: busca e inspeciona os dados crus da API
+README.md       # esta documentação
 ```
 
 Fonte de dados: [BALLDONTLIE CS2 API](https://cs.balldontlie.io/).

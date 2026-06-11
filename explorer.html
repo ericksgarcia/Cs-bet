@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CS2 Bet — Explorador de Dados da API</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--panel2:#1c2330;--border:#283041;--txt:#e6edf3;
+    --muted:#8b949e;--accent:#f0a500;--green:#2ea043;--red:#f85149;--blue:#388bfd;--purple:#a371f7}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--bg);color:var(--txt);line-height:1.5}
+  header{padding:20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#11161f,#0d1117)}
+  header h1{margin:0;font-size:20px} header h1 span{color:var(--accent)}
+  header p{margin:6px 0 0;color:var(--muted);font-size:13px;max-width:820px}
+  .wrap{max-width:1080px;margin:0 auto;padding:20px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--panel);
+    border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .field input{background:var(--panel2);border:1px solid var(--border);color:var(--txt);
+    border-radius:6px;padding:8px 10px;font-size:13px;min-width:130px}
+  button{background:var(--accent);color:#1a1a1a;border:0;border-radius:6px;padding:8px 14px;
+    font-weight:700;cursor:pointer;font-size:13px}
+  button.ghost{background:transparent;color:var(--blue);border:1px solid var(--border)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .endpoints{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  #log{font-size:13px;color:var(--muted);margin-bottom:12px;min-height:20px}
+  .queue{font-size:12px;color:var(--purple)}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;margin-bottom:14px;overflow:hidden}
+  .card h3{margin:0;padding:10px 14px;font-size:14px;background:var(--panel2);border-bottom:1px solid var(--border);
+    display:flex;justify-content:space-between;align-items:center}
+  .card h3 .url{font-size:11px;color:var(--muted);font-weight:400;word-break:break-all}
+  .card .body{padding:12px 14px}
+  .fields{font-size:12px;margin-bottom:10px}
+  .fields b{color:var(--accent)}
+  .chip{display:inline-block;background:var(--panel2);border:1px solid var(--border);border-radius:20px;
+    padding:2px 9px;margin:2px;font-size:11px;color:var(--blue);cursor:pointer}
+  .chip.copy{color:var(--green)}
+  pre{background:#0a0d12;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;
+    max-height:380px;font-size:12px;color:#c9d1d9;margin:0}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .err{background:#3d1418;border:1px solid var(--red);color:#ffb4ac;padding:12px;border-radius:8px;font-size:13px}
+  .hint{color:var(--muted);font-size:12px;margin:4px 0 12px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{padding:4px 6px;border-bottom:1px solid var(--border);text-align:left}
+  th{color:var(--muted)}
+  .ok{color:var(--green)} .miss{color:var(--red)}
+</style>
+</head>
+<body>
+<header>
+  <h1>CS2 <span>Bet</span> — Explorador de Dados da API</h1>
+  <p>Busca e mostra o <b>JSON cru</b> de cada endpoint que o preditor usa, lista os
+  <b>campos detectados</b> e verifica se o que o modelo precisa existe. Respeita o limite
+  de <b>5 req/min</b> (fila de ~13s) e usa cache de 6h. Clique nos chips para puxar dados
+  encadeados (uma partida → seus mapas; um time → seu map pool).</p>
+</header>
+
+<div class="wrap">
+  <div class="bar">
+    <div class="field">
+      <label>API Key</label>
+      <input id="apiKey" type="password" />
+    </div>
+    <div class="field">
+      <label>Dias à frente (partidas)</label>
+      <input id="days" type="number" value="14" min="1" max="60" />
+    </div>
+    <button id="runAll">Buscar tudo (sequencial)</button>
+    <button id="clearCache" class="ghost">Limpar cache</button>
+    <button id="exportBtn" class="ghost">Exportar JSON coletado</button>
+  </div>
+
+  <div class="endpoints">
+    <button class="ghost" data-ep="teams">GET /teams</button>
+    <button class="ghost" data-ep="players">GET /players</button>
+    <button class="ghost" data-ep="matches">GET /matches (próximas)</button>
+    <button class="ghost" data-ep="standings">GET /standings</button>
+    <button class="ghost" data-ep="rankings">GET /rankings</button>
+  </div>
+  <div class="hint">Dica: comece por <b>/matches</b> e <b>/teams</b>; depois clique nos chips de
+  team_id (→ /team_map_pool) e match_id (→ /match_maps) que aparecem nos resultados.</div>
+
+  <div id="log"></div>
+  <div id="results"></div>
+</div>
+
+<script>
+const BASE="https://api.balldontlie.io/cs/v1";
+const DEFAULT_KEY="778253db-dea3-443c-acfe-68c2d733bb38";
+const CACHE_TTL=6*60*60*1000, MIN_INTERVAL=13000;
+const $=(id)=>document.getElementById(id);
+const logEl=$("log"), resultsEl=$("results");
+const collected={};                 // guarda tudo p/ export
+
+/* cache */
+function cacheGet(k){try{const r=localStorage.getItem("csx:"+k);if(!r)return null;const o=JSON.parse(r);
+  if(Date.now()-o.t>CACHE_TTL)return null;return o.v;}catch(e){return null;}}
+function cacheSet(k,v){try{localStorage.setItem("csx:"+k,JSON.stringify({t:Date.now(),v}));}catch(e){}}
+
+/* fila com rate limit serial */
+let chain=Promise.resolve(), lastCall=0, pending=0;
+function enqueue(fn){
+  pending++; updateLog();
+  chain = chain.then(async()=>{
+    const wait=Math.max(0,MIN_INTERVAL-(Date.now()-lastCall));
+    if(wait>0){ countdown(wait); await new Promise(r=>setTimeout(r,wait)); }
+    lastCall=Date.now();
+    try{ return await fn(); } finally{ pending--; updateLog(); }
+  });
+  return chain;
+}
+function updateLog(extra=""){ logEl.innerHTML=`<span class="queue">Na fila: ${pending}</span> ${extra}`; }
+function countdown(ms){
+  let s=Math.ceil(ms/1000);
+  updateLog(`aguardando ${s}s p/ respeitar 5 req/min...`);
+  const t=setInterval(()=>{ s--; if(s<=0){clearInterval(t);return;} updateLog(`aguardando ${s}s p/ respeitar 5 req/min...`); },1000);
+}
+
+const apiKey=()=>$("apiKey").value.trim()||DEFAULT_KEY;
+
+async function apiRaw(path,params={}){
+  const url=new URL(BASE+path);
+  Object.entries(params).forEach(([k,v])=>{
+    if(Array.isArray(v)) v.forEach(x=>url.searchParams.append(k+"[]",x));
+    else if(v!=null&&v!=="") url.searchParams.set(k,v);
+  });
+  const ck=url.toString();
+  const c=cacheGet(ck); if(c) return {json:c, url:ck, cached:true};
+  return enqueue(async()=>{
+    const res=await fetch(url,{headers:{Authorization:apiKey()}});
+    const text=await res.text();
+    let json; try{json=JSON.parse(text);}catch(e){json={_nonJson:text};}
+    if(!res.ok){ const e=new Error("HTTP "+res.status+" — "+text.slice(0,200)); e.url=ck; throw e; }
+    cacheSet(ck,json);
+    return {json, url:ck, cached:false};
+  });
+}
+
+/* util de inspeção de campos */
+function sampleOf(json){
+  const arr=json && (json.data||json);
+  if(Array.isArray(arr)) return arr[0];
+  return arr;
+}
+function fieldList(obj){
+  if(!obj||typeof obj!=="object") return [];
+  return Object.keys(obj).map(k=>{
+    const v=obj[k]; let t=Array.isArray(v)?"array":v===null?"null":typeof v;
+    if(t==="object") t="object";
+    return {k,t,v};
+  });
+}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+/* renderiza um card de resultado */
+function card(title, url, json, opts={}){
+  const id="card_"+Math.random().toString(36).slice(2,8);
+  const sample=sampleOf(json);
+  const fields=fieldList(sample);
+  const fieldsHtml = fields.length
+    ? fields.map(f=>`<span class="chip" title="${esc(f.t)}">${esc(f.k)}<span style="color:var(--muted)"> :${esc(f.t)}</span></span>`).join("")
+    : "<i>sem objeto de exemplo</i>";
+
+  // chips de ação encadeada
+  let actions="";
+  if(opts.kind==="matches" && Array.isArray(json.data||json)){
+    const list=(json.data||json).slice(0,8);
+    actions=`<div class="fields"><b>Ações:</b> ${list.map(m=>{
+      const id1=findVal(m,"team1","home_team","radiant_team"), id2=findVal(m,"team2","away_team","dire_team");
+      const mid=m.id;
+      return `<span class="chip" onclick="fetchMatchMaps(${mid})">match_maps #${mid}</span>`;
+    }).join("")}</div>`;
+  }
+  if(opts.kind==="teams" && Array.isArray(json.data||json)){
+    const list=(json.data||json).slice(0,8);
+    actions=`<div class="fields"><b>Ações:</b> ${list.map(t=>
+      `<span class="chip" onclick="fetchMapPool(${t.id})">map_pool #${t.id} (${esc(t.name||t.slug||t.id)})</span>`
+    ).join("")}</div>`;
+  }
+
+  const html=`
+  <div class="card" id="${id}">
+    <h3><span>${esc(title)} ${json.meta?`<span style="color:var(--muted);font-weight:400">(${(json.data||[]).length} itens)</span>`:""}</span>
+        <span class="url">${esc(url)}</span></h3>
+    <div class="body">
+      <div class="fields"><b>Campos do item:</b><br>${fieldsHtml}</div>
+      ${opts.check?checkTable(opts.check, fields.map(f=>f.k)):""}
+      ${actions}
+      <pre>${esc(JSON.stringify(json, null, 2).slice(0, 20000))}</pre>
+    </div>
+  </div>`;
+  resultsEl.insertAdjacentHTML("afterbegin", html);
+}
+function findVal(o,...ks){for(const k of ks){if(o&&o[k]!=null)return o[k];}return undefined;}
+
+/* tabela "o modelo precisa disso?" */
+function checkTable(needs, keys){
+  const has=(alts)=>alts.some(a=>keys.includes(a));
+  const rows=needs.map(n=>`<tr><td>${esc(n.label)}</td>
+    <td>${n.alts.map(esc).join(" / ")}</td>
+    <td class="${has(n.alts)?"ok":"miss"}">${has(n.alts)?"✓ encontrado":"✗ ausente"}</td></tr>`).join("");
+  return `<div class="fields"><b>Checagem p/ o modelo:</b>
+    <table><tr><th>Precisa</th><th>Nome esperado</th><th>Status</th></tr>${rows}</table></div>`;
+}
+
+function showErr(title,e){
+  resultsEl.insertAdjacentHTML("afterbegin",
+    `<div class="card"><h3><span>${esc(title)}</span><span class="url">${esc(e.url||"")}</span></h3>
+     <div class="body"><div class="err">${esc(e.message)}</div></div></div>`);
+}
+
+/* ----------------- endpoints ----------------- */
+async function getMatches(){
+  const days=Number($("days").value)||14;
+  const today=new Date(), end=new Date(Date.now()+days*86400000);
+  const f=(d)=>d.toISOString().slice(0,10);
+  try{
+    const r=await apiRaw("/matches",{start_date:f(today),end_date:f(end),per_page:25});
+    collected.matches=r.json;
+    card("GET /matches (próximas)", r.url, r.json, {kind:"matches", check:[
+      {label:"Data/hora do jogo",alts:["scheduled_at","datetime","start_time","date","begin_at"]},
+      {label:"Status (agendado?)",alts:["status","state","stage"]},
+      {label:"Formato (Bo1/3/5)",alts:["best_of","bo","format","number_of_games"]},
+      {label:"Time 1",alts:["team1","home_team","teams","opponents","participants"]},
+      {label:"Time 2",alts:["team2","away_team"]},
+      {label:"Torneio",alts:["tournament","league","event","competition"]},
+    ]});
+  }catch(e){ showErr("GET /matches", e); }
+}
+async function getTeams(){
+  try{
+    const r=await apiRaw("/teams",{per_page:25});
+    collected.teams=r.json;
+    card("GET /teams", r.url, r.json, {kind:"teams", check:[
+      {label:"ID do time",alts:["id","team_id"]},
+      {label:"Nome",alts:["name","full_name","nickname","slug"]},
+      {label:"Ranking mundial",alts:["ranking","rank","world_ranking","position"]},
+    ]});
+  }catch(e){ showErr("GET /teams", e); }
+}
+async function getPlayers(){
+  try{ const r=await apiRaw("/players",{per_page:10}); collected.players=r.json;
+    card("GET /players", r.url, r.json, {}); }catch(e){ showErr("GET /players", e); }
+}
+async function getStandings(){
+  try{ const r=await apiRaw("/standings",{}); collected.standings=r.json;
+    card("GET /standings", r.url, r.json, {}); }catch(e){ showErr("GET /standings", e); }
+}
+async function getRankings(){
+  try{ const r=await apiRaw("/rankings",{}); collected.rankings=r.json;
+    card("GET /rankings", r.url, r.json, {}); }catch(e){ showErr("GET /rankings", e); }
+}
+async function fetchMapPool(teamId){
+  try{
+    const r=await apiRaw("/team_map_pool",{team_id:teamId});
+    (collected.map_pools||(collected.map_pools={}))[teamId]=r.json;
+    card("GET /team_map_pool (team "+teamId+")", r.url, r.json, {check:[
+      {label:"Nome do mapa",alts:["map_name","map","name"]},
+      {label:"Win-rate do mapa",alts:["win_rate","winrate","win_percentage","wins_pct"]},
+      {label:"Vitórias / jogos",alts:["wins","matches_played","played","games"]},
+    ]});
+  }catch(e){ showErr("GET /team_map_pool #"+teamId, e); }
+}
+async function fetchMatchMaps(matchId){
+  try{
+    const r=await apiRaw("/match_maps",{match_ids:[matchId]});
+    (collected.match_maps||(collected.match_maps={}))[matchId]=r.json;
+    card("GET /match_maps (match "+matchId+")", r.url, r.json, {check:[
+      {label:"Nome do mapa",alts:["map_name","map","name"]},
+      {label:"Ordem do mapa",alts:["map_number","number","order"]},
+      {label:"Placar t1/t2",alts:["team1_score","team2_score","score"]},
+      {label:"Vencedor",alts:["winner","winner_id","winner_team_id"]},
+    ]});
+  }catch(e){ showErr("GET /match_maps #"+matchId, e); }
+}
+window.fetchMapPool=fetchMapPool; window.fetchMatchMaps=fetchMatchMaps;
+
+/* ----------------- controles ----------------- */
+document.querySelectorAll("[data-ep]").forEach(b=>b.addEventListener("click",()=>{
+  const ep=b.dataset.ep;
+  ({teams:getTeams,players:getPlayers,matches:getMatches,standings:getStandings,rankings:getRankings})[ep]();
+}));
+
+$("runAll").addEventListener("click", async ()=>{
+  $("runAll").disabled=true;
+  resultsEl.innerHTML="";
+  await getMatches();      // 1
+  await getTeams();        // 2
+  // encadeia map_pool dos 2 primeiros times e match_maps da 1ª partida (economiza requisições)
+  const teams=(collected.teams&&(collected.teams.data||collected.teams))||[];
+  if(teams[0]) await fetchMapPool(teams[0].id);   // 3
+  if(teams[1]) await fetchMapPool(teams[1].id);   // 4
+  const matches=(collected.matches&&(collected.matches.data||collected.matches))||[];
+  if(matches[0]) await fetchMatchMaps(matches[0].id); // 5  (chega no limite/min)
+  updateLog("Concluído. Veja os campos detectados e ✓/✗ de cada checagem.");
+  $("runAll").disabled=false;
+});
+
+$("clearCache").addEventListener("click",()=>{
+  Object.keys(localStorage).filter(k=>k.startsWith("csx:")).forEach(k=>localStorage.removeItem(k));
+  updateLog("Cache limpo.");
+});
+$("exportBtn").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(collected,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="cs2-api-dump.json"; a.click();
+});
+
+$("apiKey").value=DEFAULT_KEY;
+updateLog("Pronto. Clique em <b>Buscar tudo</b> (gasta 5 requisições) ou um endpoint específico.");
+</script>
+</body>
+</html>
