@@ -8,7 +8,7 @@
   :root{
     --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#283041;
     --txt:#e6edf3; --muted:#8b949e; --accent:#f0a500; --green:#2ea043;
-    --red:#f85149; --blue:#388bfd;
+    --red:#f85149; --blue:#388bfd; --purple:#a371f7;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -16,13 +16,13 @@
   header{padding:24px 20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#11161f,#0d1117)}
   header h1{margin:0;font-size:22px;letter-spacing:.5px}
   header h1 span{color:var(--accent)}
-  header p{margin:6px 0 0;color:var(--muted);font-size:13px;max-width:760px}
+  header p{margin:6px 0 0;color:var(--muted);font-size:13px;max-width:820px}
   .wrap{max-width:980px;margin:0 auto;padding:20px}
   .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--panel);
     border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px}
   .field{display:flex;flex-direction:column;gap:4px}
   .field label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-  .field input{background:var(--panel2);border:1px solid var(--border);color:var(--txt);
+  .field input,.field select{background:var(--panel2);border:1px solid var(--border);color:var(--txt);
     border-radius:6px;padding:8px 10px;font-size:13px;min-width:120px}
   button{background:var(--accent);color:#1a1a1a;border:0;border-radius:6px;padding:9px 18px;
     font-weight:700;cursor:pointer;font-size:13px}
@@ -34,6 +34,7 @@
     padding:16px;margin-bottom:14px}
   .match .meta{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:12px;flex-wrap:wrap;gap:6px}
   .match .meta .tour{color:var(--accent)}
+  .match .meta .fmt{color:var(--purple);font-weight:700}
   .teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px}
   .team{text-align:center}
   .team .name{font-size:16px;font-weight:700;margin-bottom:4px}
@@ -45,21 +46,28 @@
   .pick{margin-top:12px;font-size:13px;padding:10px 12px;border-radius:8px;background:var(--panel2);border:1px solid var(--border)}
   .pick b{color:var(--green)}
   .pick .conf{float:right;color:var(--muted)}
+  .firstmap{margin-top:10px;font-size:12px;color:var(--muted);padding:8px 12px;border-left:3px solid var(--purple);background:#171c26}
+  .firstmap b{color:var(--purple)}
   details{margin-top:10px;font-size:12px;color:var(--muted)}
   details summary{cursor:pointer;color:var(--blue)}
   details table{width:100%;border-collapse:collapse;margin-top:8px}
-  details td{padding:3px 6px;border-bottom:1px solid var(--border)}
+  details th,details td{padding:3px 6px;border-bottom:1px solid var(--border);text-align:left}
+  details th{color:var(--muted);font-weight:600}
+  .mini{display:inline-block;height:8px;background:var(--purple);border-radius:2px;vertical-align:middle}
   .err{background:#3d1418;border:1px solid var(--red);color:#ffb4ac;padding:12px;border-radius:8px;margin-bottom:14px;font-size:13px}
   footer{color:var(--muted);font-size:12px;text-align:center;padding:30px 20px}
+  footer a{color:var(--blue)}
   code{background:var(--panel2);padding:1px 5px;border-radius:4px}
 </style>
 </head>
 <body>
 <header>
   <h1>CS2 <span>Bet</span> — Previsão de Vitória no 1º Mapa</h1>
-  <p>Modelo estatístico que estima a probabilidade de cada time vencer o <b>primeiro mapa</b> das próximas
-  partidas de Counter-Strike 2. Os dados vêm da API BALLDONTLIE e são processados no seu navegador.
-  Ordenado pelos jogos mais próximos de acontecer. <b>Não é aconselhamento financeiro.</b></p>
+  <p>Estima a probabilidade de cada time vencer o <b>primeiro mapa</b> simulando o
+  <b>veto do torneio</b> (Bo1/Bo3/Bo5): quem escolhe primeiro, a ordem de bans/picks, a
+  probabilidade de cada mapa ser o 1º e a win-rate dos times <b>naquele mapa específico</b>.
+  Dados da API BALLDONTLIE, processados no seu navegador. Ordenado pelos jogos mais próximos.
+  <b>Não é aconselhamento de apostas.</b></p>
 </header>
 
 <div class="wrap">
@@ -76,6 +84,14 @@
       <label>Dias à frente</label>
       <input id="daysAhead" type="number" min="1" max="30" value="10" />
     </div>
+    <div class="field">
+      <label>Quem escolhe 1º</label>
+      <select id="firstPicker">
+        <option value="seed">Melhor seed/ranking</option>
+        <option value="underdog">Pior seed (azarão)</option>
+        <option value="coin">Sorteio (50/50)</option>
+      </select>
+    </div>
     <button id="run">Gerar previsões</button>
     <button id="clearCache" class="ghost">Limpar cache</button>
   </div>
@@ -85,91 +101,91 @@
 </div>
 
 <footer>
-  Fonte de dados: <a href="https://cs.balldontlie.io/" style="color:var(--blue)">BALLDONTLIE CS2 API</a> ·
-  Limite respeitado: 5 requisições/minuto · Cache local de 6h ·
-  Gerado por CS2 Bet
+  Fonte: <a href="https://cs.balldontlie.io/">BALLDONTLIE CS2 API</a> ·
+  Limite respeitado: 5 requisições/minuto · Cache local 6h ·
+  Simulação de veto via Monte Carlo
 </footer>
 
 <script>
 /* ============================================================================
-   CS2 BET — Previsão de vitória no 1º mapa
+   CS2 BET — Previsão de vitória no 1º mapa via SIMULAÇÃO DO VETO
    ----------------------------------------------------------------------------
-   Tudo roda no navegador porque a API exige a chamada com a API key e o
-   limite de 5 req/min. Para respeitar o limite usamos uma FILA que espaça
-   as requisições em ~13s, além de CACHE em localStorage (6h) para evitar
-   gastar requisições repetidas.
+   Pipeline:
+     1. /matches  -> próximas partidas (ordenadas pelo horário).
+     2. /team_map_pool -> win-rate de cada time por mapa.
+     3. Simula o veto do formato (Bo1/Bo3/Bo5) por Monte Carlo:
+        quem escolhe 1º, bans e picks -> distribuição de qual será o 1º mapa.
+     4. Para cada mapa candidato: P(time1 vence) via curva logística da win-rate
+        naquele mapa.
+     5. P(vencer 1º mapa) = Σ P(mapa = 1º) * P(vencer naquele mapa).
+
+   Tudo roda no navegador (API exige a key e impõe 5 req/min).
+   Fila com espaçamento ~13s + cache localStorage (6h) respeitam o limite.
    ========================================================================== */
 
 const BASE = "https://api.balldontlie.io/cs/v1";
 const DEFAULT_KEY = "778253db-dea3-443c-acfe-68c2d733bb38";
-const CACHE_TTL = 6 * 60 * 60 * 1000;          // 6 horas
-const MIN_INTERVAL = 13000;                     // ~5 req/min com folga
-const ELO_DIVISOR = 400;                        // sensibilidade da curva logística
+const CACHE_TTL = 6 * 60 * 60 * 1000;   // 6h
+const MIN_INTERVAL = 13000;             // ~5 req/min com folga
+const ELO_DIVISOR = 0.20;               // sensibilidade da logística (escala de win-rate 0..1)
+const VETO_SIMS = 4000;                 // simulações de Monte Carlo do veto
+const VETO_TEMP = 0.10;                 // "temperatura" da escolha no veto (menor = mais determinístico)
+
+// Pool ativo padrão do CS2 (fallback se a API não trouxer os mapas)
+const DEFAULT_POOL = ["Ancient","Anubis","Dust2","Inferno","Mirage","Nuke","Train"];
 
 const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
 const resultsEl = $("results");
 
-/* ----------------------------- util de cache ---------------------------- */
+/* ----------------------------- cache ------------------------------------ */
 function cacheGet(key){
   try{
     const raw = localStorage.getItem("csbet:"+key);
     if(!raw) return null;
-    const obj = JSON.parse(raw);
-    if(Date.now() - obj.t > CACHE_TTL) return null;
-    return obj.v;
+    const o = JSON.parse(raw);
+    if(Date.now()-o.t > CACHE_TTL) return null;
+    return o.v;
   }catch(e){ return null; }
 }
-function cacheSet(key,v){
-  try{ localStorage.setItem("csbet:"+key, JSON.stringify({t:Date.now(),v})); }catch(e){}
-}
+function cacheSet(key,v){ try{ localStorage.setItem("csbet:"+key, JSON.stringify({t:Date.now(),v})); }catch(e){} }
 
-/* --------------------- fila com rate limit + cache ---------------------- */
+/* --------------------- rate limit (fila ~5/min) ------------------------- */
 let lastCall = 0;
 async function rateGate(){
-  const wait = Math.max(0, MIN_INTERVAL - (Date.now()-lastCall));
+  const wait = Math.max(0, MIN_INTERVAL-(Date.now()-lastCall));
   if(wait>0) await new Promise(r=>setTimeout(r,wait));
   lastCall = Date.now();
 }
-
 async function api(path, params={}, label=""){
   const url = new URL(BASE+path);
   Object.entries(params).forEach(([k,v])=>{
     if(Array.isArray(v)) v.forEach(x=>url.searchParams.append(k+"[]",x));
-    else if(v!==undefined && v!==null && v!=="") url.searchParams.set(k,v);
+    else if(v!=null && v!=="") url.searchParams.set(k,v);
   });
-  const cacheKey = url.toString();
-  const cached = cacheGet(cacheKey);
-  if(cached){ return cached; }
-
+  const ck = url.toString();
+  const cached = cacheGet(ck);
+  if(cached) return cached;
   await rateGate();
   if(label) setStatus(label);
   const res = await fetch(url, { headers:{ "Authorization": apiKey() } });
-  if(res.status===429) throw new Error("Limite de requisições atingido (429). Aguarde 1 min e tente de novo.");
+  if(res.status===429) throw new Error("Limite de requisições (429). Aguarde 1 min e tente de novo.");
   if(!res.ok){
-    const body = await res.text().catch(()=> "");
-    throw new Error("Erro "+res.status+" em "+path+(body?(" — "+body.slice(0,140)):""));
+    const b = await res.text().catch(()=> "");
+    throw new Error("Erro "+res.status+" em "+path+(b?(" — "+b.slice(0,140)):""));
   }
   const json = await res.json();
-  cacheSet(cacheKey, json);
+  cacheSet(ck, json);
   return json;
 }
-
 function apiKey(){ return $("apiKey").value.trim() || DEFAULT_KEY; }
 
-/* --------------------------- helpers de campo --------------------------- */
-// A API pode variar nomes de campos; lemos defensivamente.
-const pick = (obj, ...keys) => { for(const k of keys){ if(obj && obj[k]!=null) return obj[k]; } return undefined; };
-
-function matchDate(m){
-  const d = pick(m,"scheduled_at","datetime","start_time","date","scheduled_time","begin_at");
-  return d ? new Date(d) : null;
-}
+/* --------------------------- leitura defensiva -------------------------- */
+const pick = (o,...ks)=>{ for(const k of ks){ if(o && o[k]!=null) return o[k]; } return undefined; };
+function matchDate(m){ const d=pick(m,"scheduled_at","datetime","start_time","date","scheduled_time","begin_at"); return d?new Date(d):null; }
 function matchStatus(m){ return (pick(m,"status","state","stage")||"").toString().toLowerCase(); }
 function teamsOf(m){
-  // formatos possíveis: {team1,team2}, {home_team,away_team}, {teams:[...]}, {participants:[...]}
-  let a = pick(m,"team1","home_team","radiant_team");
-  let b = pick(m,"team2","away_team","dire_team");
+  let a=pick(m,"team1","home_team","radiant_team"), b=pick(m,"team2","away_team","dire_team");
   if(!a && Array.isArray(m.teams)){ a=m.teams[0]; b=m.teams[1]; }
   if(!a && Array.isArray(m.participants)){ a=m.participants[0]?.team||m.participants[0]; b=m.participants[1]?.team||m.participants[1]; }
   if(!a && Array.isArray(m.opponents)){ a=m.opponents[0]?.opponent||m.opponents[0]; b=m.opponents[1]?.opponent||m.opponents[1]; }
@@ -178,183 +194,274 @@ function teamsOf(m){
 const teamId = (t)=> pick(t,"id","team_id");
 const teamName = (t)=> pick(t,"name","full_name","nickname","slug") || ("Time #"+teamId(t));
 
-function setStatus(txt, pct){
-  statusEl.innerHTML = txt + (pct!=null ? ` <span class="bar" style="width:${Math.round(pct*120)}px"></span>` : "");
+// Normaliza nome de mapa: "de_inferno" / "Inferno" -> "Inferno"
+function normMap(n){
+  if(!n) return null;
+  let s = String(n).replace(/^de_/i,"").trim();
+  return s.charAt(0).toUpperCase()+s.slice(1).toLowerCase();
 }
 
-/* ------------------------- coleta dos dados ----------------------------- */
+// best_of -> número (1/3/5)
+function bestOf(m){
+  let f = pick(m,"best_of","bo","format","series_type","number_of_games");
+  if(f==null) return 3;                 // assume Bo3 (mais comum em playoffs)
+  const s = String(f).toLowerCase();
+  const num = s.match(/\d+/);
+  if(num) return parseInt(num[0],10);
+  return 3;
+}
+
+function setStatus(txt,pct){
+  statusEl.innerHTML = txt + (pct!=null?` <span class="bar" style="width:${Math.round(pct*120)}px"></span>`:"");
+}
+
+/* ------------------------- coleta de partidas --------------------------- */
 async function fetchUpcomingMatches(days){
-  const today = new Date();
-  const end = new Date(today.getTime()+days*86400000);
-  const fmt = (d)=> d.toISOString().slice(0,10);
-
-  // Tentamos os parâmetros mais comuns do BALLDONTLIE para listar partidas futuras.
-  let data = [];
+  const today=new Date(), end=new Date(today.getTime()+days*86400000);
+  const fmt=(d)=>d.toISOString().slice(0,10);
+  let data=[];
   try{
-    const r = await api("/matches", { start_date:fmt(today), end_date:fmt(end), per_page:100 }, "Buscando partidas...");
-    data = r.data || r;
+    const r=await api("/matches",{start_date:fmt(today),end_date:fmt(end),per_page:100},"Buscando partidas...");
+    data=r.data||r;
   }catch(e){
-    // fallback: sem filtro de data
-    const r = await api("/matches", { per_page:100 }, "Buscando partidas...");
-    data = r.data || r;
+    const r=await api("/matches",{per_page:100},"Buscando partidas...");
+    data=r.data||r;
   }
-
-  const now = Date.now();
-  return data
-    .map(m=>({ m, date:matchDate(m), st:matchStatus(m) }))
-    .filter(x=> x.date && x.date.getTime() >= now - 3600000)          // ainda não começou (folga 1h)
-    .filter(x=> !/finished|closed|complete|ended|cancel/.test(x.st))  // descarta encerradas
-    .sort((a,b)=> a.date - b.date)
+  const now=Date.now();
+  return (data||[])
+    .map(m=>({m,date:matchDate(m),st:matchStatus(m)}))
+    .filter(x=>x.date && x.date.getTime()>=now-3600000)
+    .filter(x=>!/finished|closed|complete|ended|cancel/.test(x.st))
+    .sort((a,b)=>a.date-b.date)
     .map(x=>x.m);
 }
 
-async function fetchTeamStrength(team){
-  const id = teamId(team);
+/* --------------- win-rate por mapa de um time --------------------------- */
+async function fetchTeamMaps(team){
+  const id=teamId(team);
   if(id==null) return null;
-  let pool=null, rank=null;
-  try{
-    const r = await api("/team_map_pool", { team_id:id }, "Stats: "+teamName(team));
-    pool = r.data || r;
-  }catch(e){ /* segue sem pool */ }
-
-  // média de win-rate no pool de mapas (qualquer formato razoável de campo)
-  let wr=[];
-  const arr = Array.isArray(pool) ? pool : (pool && pool.maps) || [];
+  let pool=null;
+  try{ const r=await api("/team_map_pool",{team_id:id},"Stats: "+teamName(team)); pool=r.data||r; }catch(e){}
+  const arr = Array.isArray(pool)?pool:(pool&&pool.maps)||[];
+  const maps={};
   arr.forEach(mp=>{
-    let w = pick(mp,"win_rate","winrate","win_percentage","wins_pct");
+    const name=normMap(pick(mp,"map_name","map","name"));
+    if(!name) return;
+    let w=pick(mp,"win_rate","winrate","win_percentage","wins_pct");
     if(w==null){
-      const wins = pick(mp,"wins"), losses = pick(mp,"losses"), played = pick(mp,"matches_played","played","games");
-      const tot = played!=null ? played : (wins!=null && losses!=null ? wins+losses : null);
-      if(wins!=null && tot) w = wins/tot;
+      const wins=pick(mp,"wins"),losses=pick(mp,"losses"),played=pick(mp,"matches_played","played","games");
+      const tot = played!=null?played:(wins!=null&&losses!=null?wins+losses:null);
+      if(wins!=null&&tot) w=wins/tot;
     }
-    if(w!=null){ w = w>1 ? w/100 : w; wr.push(w); }
+    if(w!=null){ w=w>1?w/100:w; maps[name]={wr:Math.min(.95,Math.max(.05,w)), played:pick(mp,"matches_played","played","games")||null}; }
   });
-  const avgWr = wr.length ? wr.reduce((a,b)=>a+b,0)/wr.length : 0.5;
-
-  rank = pick(team,"ranking","rank","world_ranking","position");
-  return { id, name:teamName(team), avgWr, rank, mapsCount:wr.length };
+  const rank=pick(team,"ranking","rank","world_ranking","position");
+  return { id, name:teamName(team), maps, rank };
 }
 
-/* ----------------------------- modelo ----------------------------------- */
+/* ------------------------- modelo por mapa ------------------------------ */
+// win-rate do time em um mapa (0.5 se desconhecido)
+const wrOn = (s,map)=> (s.maps[map] && s.maps[map].wr!=null) ? s.maps[map].wr : 0.5;
+// P(A vence o mapa) pela diferença de win-rate, via logística
+function mapWinProb(a,b,map){
+  return 1/(1+Math.pow(10, -((wrOn(a,map)-wrOn(b,map))/ELO_DIVISOR)));
+}
+
+/* ----------------------- SIMULAÇÃO DO VETO ------------------------------ */
 /*
-  Rating de cada time combina:
-    (1) win-rate médio no pool de mapas (proxy direto de força no mapa)
-    (2) ranking mundial Valve (quando disponível) — quanto menor o nº, mais forte
-  Convertido para uma escala tipo Elo e passado por curva logística:
-    P(time1 vence mapa1) = 1 / (1 + 10^(-(R1-R2)/400))
+  Ordem de veto padrão (HLTV/Valve):
+   - Bo1: ban,ban,ban,ban,ban,ban -> sobra 1 mapa (o 1º e único).
+   - Bo3: ban,ban, PICK(1º mapa do quem escolhe), PICK, ban,ban -> decider.
+   - Bo5: ban,ban, PICK(1º mapa), PICK, PICK, PICK -> decider.
+  Quem começa ("first") banindo/escolhendo é definido por seed/ranking (config).
+  No Bo3/Bo5 o 1º MAPA é o PICK de quem escolhe primeiro.
+  No Bo1 o 1º MAPA é o que sobra dos bans.
+  Cada decisão é estocástica (softmax sobre a vantagem) -> distribuição de mapas.
 */
-function ratingFromStrength(s){
-  let r = 1000 + (s.avgWr - 0.5) * 800;            // win-rate -> ±400 pts
-  if(s.rank!=null && !isNaN(s.rank)){
-    r += Math.max(0, (50 - Number(s.rank))) * 6;    // bônus por ranking top
+function softmaxChoose(maps, scoreFn, temp){
+  const ex = maps.map(m=>Math.exp(scoreFn(m)/temp));
+  const sum = ex.reduce((a,b)=>a+b,0)||1;
+  let r=Math.random()*sum, acc=0;
+  for(let i=0;i<maps.length;i++){ acc+=ex[i]; if(r<=acc) return maps[i]; }
+  return maps[maps.length-1];
+}
+// vantagem do time T (s) sobre o oponente (o) no mapa m
+const adv = (s,o,m)=> wrOn(s,m)-wrOn(o,m);
+
+function simulateVeto(format, pool, A, B, firstIsA){
+  // first = quem age primeiro; second = o outro
+  const first = firstIsA?A:B, second = firstIsA?B:A;
+  let remaining = pool.slice();
+  const banLowest = (team,opp)=> { // bane mapa de menor vantagem própria
+    const m = softmaxChoose(remaining, x=>-adv(team,opp,x), VETO_TEMP);
+    remaining = remaining.filter(x=>x!==m); return m;
+  };
+  const pickBest = (team,opp)=> { // escolhe mapa de maior vantagem própria
+    const m = softmaxChoose(remaining, x=>adv(team,opp,x), VETO_TEMP);
+    remaining = remaining.filter(x=>x!==m); return m;
+  };
+
+  if(format===1){
+    // Bo1: alterna bans até sobrar 1
+    let turnFirst=true;
+    while(remaining.length>1){
+      if(turnFirst) banLowest(first,second); else banLowest(second,first);
+      turnFirst=!turnFirst;
+    }
+    return remaining[0];           // 1º e único mapa
   }
+  // Bo3/Bo5: ban, ban, PICK(first) = 1º mapa
+  banLowest(first,second);
+  banLowest(second,first);
+  return pickBest(first,second);   // 1º mapa = pick de quem escolhe primeiro
+}
+
+// Roda N simulações -> distribuição do 1º mapa e quem o escolheu
+function vetoDistribution(format, pool, A, B, firstMode){
+  const dist = {};               // mapa -> contagem
+  for(let i=0;i<VETO_SIMS;i++){
+    let firstIsA;
+    if(firstMode==="coin") firstIsA = Math.random()<0.5;
+    else {
+      const aBetter = teamRating(A) >= teamRating(B);
+      firstIsA = firstMode==="underdog" ? !aBetter : aBetter;
+    }
+    const m = simulateVeto(format, pool, A, B, firstIsA);
+    dist[m] = (dist[m]||0)+1;
+  }
+  const out = Object.entries(dist).map(([map,c])=>({map, p:c/VETO_SIMS}))
+                    .sort((x,y)=>y.p-x.p);
+  return out;
+}
+
+// rating geral só para decidir seed (quem escolhe 1º)
+function teamRating(s){
+  const vals=Object.values(s.maps).map(x=>x.wr);
+  let r = vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0.5;
+  if(s.rank!=null && !isNaN(s.rank)) r += Math.max(0,(50-Number(s.rank)))*0.004;
   return r;
 }
-function winProb(r1,r2){
-  return 1/(1+Math.pow(10, -(r1-r2)/ELO_DIVISOR));
+
+/* ----------------------------- agregação -------------------------------- */
+function predictFirstMap(m, A, B, firstMode){
+  const fmt = bestOf(m);
+  // pool = união dos mapas conhecidos dos dois times; fallback default
+  let pool = Array.from(new Set([...Object.keys(A.maps),...Object.keys(B.maps)]));
+  if(pool.length<2) pool = DEFAULT_POOL.slice();
+
+  const dist = vetoDistribution(fmt, pool, A, B, firstMode);
+  // P(A vence 1º mapa) = Σ P(mapa=1º) * P(A vence naquele mapa)
+  let pA=0;
+  const detail = dist.map(d=>{
+    const wp = mapWinProb(A,B,d.map);
+    pA += d.p*wp;
+    return { map:d.map, pFirst:d.p, wrA:wrOn(A,d.map), wrB:wrOn(B,d.map), pAwins:wp };
+  });
+  return { fmt, pA, pB:1-pA, detail, topMap:detail[0] };
 }
 
-/* ----------------------------- render ----------------------------------- */
+/* ------------------------------ render ---------------------------------- */
 function fmtWhen(d){
   if(!d) return "data indefinida";
-  const diff = d - Date.now();
-  const h = Math.round(diff/3600000);
-  const rel = h<0 ? "ao vivo / começando" : h<24 ? ("em "+h+"h") : ("em "+Math.round(h/24)+" dias");
-  return d.toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) + " ("+rel+")";
+  const diff=d-Date.now(), h=Math.round(diff/3600000);
+  const rel = h<0?"ao vivo / começando":h<24?("em "+h+"h"):("em "+Math.round(h/24)+" dias");
+  return d.toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})+" ("+rel+")";
 }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function showError(msg){ resultsEl.innerHTML=`<div class="err">${esc(msg)}</div>`+resultsEl.innerHTML; }
+const pc=(p)=>Math.round(p*100);
 
-function renderMatch(m, s1, s2){
-  const [t1,t2] = teamsOf(m);
-  const r1 = ratingFromStrength(s1), r2 = ratingFromStrength(s2);
-  const p1 = winProb(r1,r2), p2 = 1-p1;
-  const favName = p1>=p2 ? s1.name : s2.name;
-  const favP = Math.max(p1,p2);
-  const conf = favP>0.65 ? "Alta" : favP>0.56 ? "Média" : "Baixa";
-  const tour = pick(m,"tournament","league","event","competition");
-  const tourName = tour ? (pick(tour,"name")||tour) : "Partida CS2";
-  const fmt = pick(m,"format","best_of","bo") || "";
+function renderMatch(m, A, B, pred){
+  const p1=pred.pA, p2=pred.pB;
+  const fav = p1>=p2?A.name:B.name, favP=Math.max(p1,p2);
+  const conf = favP>0.65?"Alta":favP>0.56?"Média":"Baixa";
+  const tour=pick(m,"tournament","league","event","competition");
+  const tourName=tour?(pick(tour,"name")||tour):"Partida CS2";
+  const tm=pred.topMap;
 
-  const pct = (p)=> Math.round(p*100);
+  const rows = pred.detail.map(d=>`
+    <tr>
+      <td>${esc(d.map)}</td>
+      <td><span class="mini" style="width:${Math.round(d.pFirst*80)}px"></span> ${pc(d.pFirst)}%</td>
+      <td>${pc(d.wrA)}%</td>
+      <td>${pc(d.wrB)}%</td>
+      <td>${pc(d.pAwins)}%</td>
+    </tr>`).join("");
+
   return `
   <div class="match">
     <div class="meta">
-      <span class="tour">${esc(tourName)} ${fmt?("· "+esc(fmt)):""}</span>
-      <span>${esc(fmtWhen(matchDate(m)))}</span>
+      <span class="tour">${esc(tourName)}</span>
+      <span><span class="fmt">Bo${pred.fmt}</span> · ${esc(fmtWhen(matchDate(m)))}</span>
     </div>
     <div class="teams">
       <div class="team">
-        <div class="name">${esc(s1.name)}</div>
-        <div class="rank">${s1.rank!=null?("Rank #"+s1.rank+" · "):""}WR mapas ${pct(s1.avgWr)}%</div>
+        <div class="name">${esc(A.name)}</div>
+        <div class="rank">${A.rank!=null?("Rank #"+A.rank):"sem ranking"}</div>
       </div>
       <div class="vs">VS</div>
       <div class="team">
-        <div class="name">${esc(s2.name)}</div>
-        <div class="rank">${s2.rank!=null?("Rank #"+s2.rank+" · "):""}WR mapas ${pct(s2.avgWr)}%</div>
+        <div class="name">${esc(B.name)}</div>
+        <div class="rank">${B.rank!=null?("Rank #"+B.rank):"sem ranking"}</div>
       </div>
     </div>
     <div class="probbar">
-      <div class="p1" style="width:${pct(p1)}%">${pct(p1)}%</div>
-      <div class="p2" style="width:${pct(p2)}%">${pct(p2)}%</div>
+      <div class="p1" style="width:${pc(p1)}%">${pc(p1)}%</div>
+      <div class="p2" style="width:${pc(p2)}%">${pc(p2)}%</div>
     </div>
     <div class="pick">
-      Palpite 1º mapa: <b>${esc(favName)}</b> (${pct(favP)}%)
+      Palpite 1º mapa: <b>${esc(fav)}</b> (${pc(favP)}%)
       <span class="conf">Confiança: ${conf}</span>
     </div>
+    <div class="firstmap">
+      1º mapa mais provável: <b>${esc(tm.map)}</b> (${pc(tm.pFirst)}% de chance de ser ele) —
+      ${esc(A.name)} vence ${esc(tm.map)} em <b>${pc(tm.wrA)}%</b> · ${esc(B.name)} em <b>${pc(tm.wrB)}%</b>.
+    </div>
     <details>
-      <summary>Como foi calculado</summary>
+      <summary>Detalhe do veto (Bo${pred.fmt}) e cálculo por mapa</summary>
       <table>
-        <tr><td>Rating ${esc(s1.name)}</td><td>${r1.toFixed(0)} (WR ${pct(s1.avgWr)}% em ${s1.mapsCount} mapas)</td></tr>
-        <tr><td>Rating ${esc(s2.name)}</td><td>${r2.toFixed(0)} (WR ${pct(s2.avgWr)}% em ${s2.mapsCount} mapas)</td></tr>
-        <tr><td>Curva logística</td><td>P = 1/(1+10^(-(R1-R2)/${ELO_DIVISOR}))</td></tr>
+        <tr><th>Mapa</th><th>P(ser o 1º)</th><th>WR ${esc(A.name)}</th><th>WR ${esc(B.name)}</th><th>P(${esc(A.name)} vence)</th></tr>
+        ${rows}
       </table>
+      <p>P(${esc(A.name)} vencer 1º mapa) = Σ P(mapa ser o 1º) × P(vencer nele) = <b>${pc(p1)}%</b>.
+      Simulação de ${VETO_SIMS.toLocaleString("pt-BR")} vetos.</p>
     </details>
   </div>`;
 }
 
-function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
-function showError(msg){ resultsEl.innerHTML = `<div class="err">${esc(msg)}</div>` + resultsEl.innerHTML; }
-
 /* ------------------------------ orquestra ------------------------------- */
 async function run(){
-  $("run").disabled = true;
-  resultsEl.innerHTML = "";
+  $("run").disabled=true; resultsEl.innerHTML="";
   try{
-    const days = Math.max(1, Number($("daysAhead").value)||10);
-    const n = Math.max(1, Number($("numGames").value)||6);
+    const days=Math.max(1,Number($("daysAhead").value)||10);
+    const n=Math.max(1,Number($("numGames").value)||6);
+    const firstMode=$("firstPicker").value;
 
-    const matches = (await fetchUpcomingMatches(days)).slice(0, n);
+    const matches=(await fetchUpcomingMatches(days)).slice(0,n);
     if(!matches.length){ setStatus("Nenhuma partida futura encontrada nesse intervalo."); return; }
-    setStatus(`Encontradas ${matches.length} partidas. Coletando estatísticas dos times...`);
+    setStatus(`Encontradas ${matches.length} partidas. Coletando win-rate por mapa...`);
 
-    // dedupe de times para economizar requisições (limite 5/min)
-    const teamCache = new Map();
-    async function strength(team){
-      const id = teamId(team);
-      if(teamCache.has(id)) return teamCache.get(id);
-      const s = await fetchTeamStrength(team);
-      teamCache.set(id, s);
-      return s;
+    const cache=new Map();
+    async function maps(team){
+      const id=teamId(team);
+      if(cache.has(id)) return cache.get(id);
+      const s=await fetchTeamMaps(team); cache.set(id,s); return s;
     }
 
     let done=0;
     for(const m of matches){
-      const [t1,t2] = teamsOf(m);
-      if(!t1||!t2){ continue; }
-      const s1 = await strength(t1);
-      const s2 = await strength(t2);
-      if(!s1||!s2){ continue; }
-      resultsEl.insertAdjacentHTML("beforeend", renderMatch(m, s1, s2));
-      done++;
-      setStatus(`Processando... ${done}/${matches.length}`, done/matches.length);
+      const [t1,t2]=teamsOf(m);
+      if(!t1||!t2) continue;
+      const A=await maps(t1), B=await maps(t2);
+      if(!A||!B) continue;
+      const pred=predictFirstMap(m,A,B,firstMode);
+      resultsEl.insertAdjacentHTML("beforeend", renderMatch(m,A,B,pred));
+      done++; setStatus(`Processando... ${done}/${matches.length}`, done/matches.length);
     }
-    setStatus(`Pronto — ${done} previsões geradas. Atualizado em ${new Date().toLocaleTimeString("pt-BR")}.`);
+    setStatus(`Pronto — ${done} previsões. Atualizado às ${new Date().toLocaleTimeString("pt-BR")}.`);
   }catch(e){
-    console.error(e);
-    showError(e.message || String(e));
-    setStatus("Falhou. Veja o erro acima.");
-  }finally{
-    $("run").disabled = false;
-  }
+    console.error(e); showError(e.message||String(e)); setStatus("Falhou. Veja o erro acima.");
+  }finally{ $("run").disabled=false; }
 }
 
 $("run").addEventListener("click", run);
@@ -362,9 +469,7 @@ $("clearCache").addEventListener("click", ()=>{
   Object.keys(localStorage).filter(k=>k.startsWith("csbet:")).forEach(k=>localStorage.removeItem(k));
   setStatus("Cache limpo.");
 });
-
-// pré-preenche a chave fornecida e roda automaticamente
-$("apiKey").value = DEFAULT_KEY;
+$("apiKey").value=DEFAULT_KEY;
 window.addEventListener("load", run);
 </script>
 </body>
