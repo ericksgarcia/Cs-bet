@@ -30,18 +30,30 @@ Consequência prática captada pelo modelo: em Bo3/Bo5, quem escolhe primeiro te
 a pegar **o seu mapa mais forte** — então o 1º mapa costuma favorecer quem escolhe.
 Em Bo1, os bans removem os mapas fortes dos dois lados e sobra um mapa equilibrado.
 
-## Pipeline
+## Pipeline (campos reais da OpenAPI CS2)
 
-1. **`/matches`** — próximas partidas, ordenadas pelo horário.
-2. **`/team_map_pool`** — win-rate de cada time **por mapa**.
-3. **Simulação Monte Carlo do veto** (4.000 iterações): aplica bans/picks com
-   escolha estocástica (*softmax* sobre a vantagem de win-rate) → **distribuição de
-   qual será o 1º mapa**.
-4. **Probabilidade por mapa**: para cada mapa candidato,
-   `P(time1 vence) = 1/(1+10^(-(WR1−WR2)/0.20))` (curva logística da diferença de
-   win-rate **naquele mapa específico**).
-5. **Agregação**:
+1. **`GET /matches`** (filtro `dates[]`) — próximas partidas, ordenadas pelo horário;
+   descarta as que já têm `winner`.
+2. **`GET /rankings`** (`ranking_type=BO1`) — `rank` e `points` de cada time. O BO1 é
+   o mais relevante para um **mapa único**. Define quem é o melhor seed (escolhe 1º) e
+   entra como força do time.
+3. **`GET /team_map_pool`** — por mapa: `wins`, `losses`, `matches_played`, `win_rate`
+   (escala 0–100) e **`is_permaban`**. A win-rate é **regularizada** (encolhida para 50%
+   quando há poucos jogos): `wr = (wins + 2.5)/(jogos + 5)`.
+4. **Simulação Monte Carlo do veto** (4.000 iterações): bans/picks com escolha
+   estocástica (*softmax* sobre a vantagem de win-rate). O **`is_permaban`** é usado de
+   verdade — o time quase sempre bane seu permaban e **nunca o escolhe** como pick →
+   **distribuição realista de qual será o 1º mapa**.
+5. **Probabilidade por mapa**:
+   `P(time1 vence) = 1/(1+10^(-(WR1−WR2)/0.20))` (logística da diferença de win-rate
+   **naquele mapa específico**).
+6. **Agregação**:
    `P(vencer 1º mapa) = Σ P(mapa ser o 1º) × P(vencer naquele mapa)`.
+
+> ℹ️ **Planos da API**: `team_map_pool` e `rankings` exigem plano **ALL-STAR**;
+> `matches`/`match_maps` exigem **GOAT**. Se a sua key não tiver acesso, esses
+> endpoints retornam erro — o modelo degrada com elegância (usa 50%/pool padrão).
+> O `explorer.html` mostra exatamente a quais endpoints sua key tem acesso.
 
 Cada card mostra: probabilidade final de cada time, o **1º mapa mais provável**, a
 **win-rate dos dois times nesse mapa**, e uma tabela com a distribuição completa do

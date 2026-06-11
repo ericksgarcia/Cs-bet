@@ -76,7 +76,7 @@
     <button class="ghost" data-ep="teams">GET /teams</button>
     <button class="ghost" data-ep="players">GET /players</button>
     <button class="ghost" data-ep="matches">GET /matches (próximas)</button>
-    <button class="ghost" data-ep="standings">GET /standings</button>
+    <button class="ghost" data-ep="tournaments">GET /tournaments</button>
     <button class="ghost" data-ep="rankings">GET /rankings</button>
   </div>
   <div class="hint">Dica: comece por <b>/matches</b> e <b>/teams</b>; depois clique nos chips de
@@ -214,10 +214,10 @@ function showErr(title,e){
 /* ----------------- endpoints ----------------- */
 async function getMatches(){
   const days=Number($("days").value)||14;
-  const today=new Date(), end=new Date(Date.now()+days*86400000);
   const f=(d)=>d.toISOString().slice(0,10);
+  const dates=[]; for(let i=0;i<days;i++) dates.push(f(new Date(Date.now()+i*86400000)));
   try{
-    const r=await apiRaw("/matches",{start_date:f(today),end_date:f(end),per_page:25});
+    const r=await apiRaw("/matches",{dates, per_page:25});
     collected.matches=r.json;
     card("GET /matches (próximas)", r.url, r.json, {kind:"matches", check:[
       {label:"Data/hora do jogo",alts:["scheduled_at","datetime","start_time","date","begin_at"]},
@@ -249,8 +249,17 @@ async function getStandings(){
     card("GET /standings", r.url, r.json, {}); }catch(e){ showErr("GET /standings", e); }
 }
 async function getRankings(){
-  try{ const r=await apiRaw("/rankings",{}); collected.rankings=r.json;
-    card("GET /rankings", r.url, r.json, {}); }catch(e){ showErr("GET /rankings", e); }
+  try{ const r=await apiRaw("/rankings",{ranking_type:"BO1"}); collected.rankings=r.json;
+    card("GET /rankings (BO1)", r.url, r.json, {check:[
+      {label:"Posição",alts:["rank","ranking","position"]},
+      {label:"Pontos",alts:["points","rating"]},
+      {label:"Tipo (BO1/BO3)",alts:["ranking_type"]},
+      {label:"Time",alts:["team","team_id"]},
+    ]}); }catch(e){ showErr("GET /rankings", e); }
+}
+async function getTournaments(){
+  try{ const r=await apiRaw("/tournaments",{per_page:25}); collected.tournaments=r.json;
+    card("GET /tournaments", r.url, r.json, {}); }catch(e){ showErr("GET /tournaments", e); }
 }
 async function fetchMapPool(teamId){
   try{
@@ -280,7 +289,7 @@ window.fetchMapPool=fetchMapPool; window.fetchMatchMaps=fetchMatchMaps;
 /* ----------------- controles ----------------- */
 document.querySelectorAll("[data-ep]").forEach(b=>b.addEventListener("click",()=>{
   const ep=b.dataset.ep;
-  ({teams:getTeams,players:getPlayers,matches:getMatches,standings:getStandings,rankings:getRankings})[ep]();
+  ({teams:getTeams,players:getPlayers,matches:getMatches,tournaments:getTournaments,rankings:getRankings})[ep]();
 }));
 
 $("runAll").addEventListener("click", async ()=>{

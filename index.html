@@ -216,12 +216,14 @@ function setStatus(txt,pct){
 }
 
 /* ------------------------- coleta de partidas --------------------------- */
+// A API CS2 filtra partidas por dates[] (YYYY-MM-DD), não por start/end_date.
 async function fetchUpcomingMatches(days){
-  const today=new Date(), end=new Date(today.getTime()+days*86400000);
   const fmt=(d)=>d.toISOString().slice(0,10);
+  const dates=[];
+  for(let i=0;i<days;i++){ dates.push(fmt(new Date(Date.now()+i*86400000))); }
   let data=[];
   try{
-    const r=await api("/matches",{start_date:fmt(today),end_date:fmt(end),per_page:100},"Buscando partidas...");
+    const r=await api("/matches",{dates, per_page:100},"Buscando partidas...");
     data=r.data||r;
   }catch(e){
     const r=await api("/matches",{per_page:100},"Buscando partidas...");
@@ -232,11 +234,13 @@ async function fetchUpcomingMatches(days){
     .map(m=>({m,date:matchDate(m),st:matchStatus(m)}))
     .filter(x=>x.date && x.date.getTime()>=now-3600000)
     .filter(x=>!/finished|closed|complete|ended|cancel/.test(x.st))
+    .filter(x=>pick(x.m,"winner","winner_id","winner_team_id")==null)  // ainda não decidida
     .sort((a,b)=>a.date-b.date)
     .map(x=>x.m);
 }
 
 /* --------------- win-rate por mapa de um time --------------------------- */
+const SHRINK_K = 5;  // regularização: poucos jogos -> win-rate puxada p/ 50%
 async function fetchTeamMaps(team){
   const id=teamId(team);
   if(id==null) return null;
@@ -247,16 +251,47 @@ async function fetchTeamMaps(team){
   arr.forEach(mp=>{
     const name=normMap(pick(mp,"map_name","map","name"));
     if(!name) return;
-    let w=pick(mp,"win_rate","winrate","win_percentage","wins_pct");
-    if(w==null){
-      const wins=pick(mp,"wins"),losses=pick(mp,"losses"),played=pick(mp,"matches_played","played","games");
-      const tot = played!=null?played:(wins!=null&&losses!=null?wins+losses:null);
-      if(wins!=null&&tot) w=wins/tot;
-    }
-    if(w!=null){ w=w>1?w/100:w; maps[name]={wr:Math.min(.95,Math.max(.05,w)), played:pick(mp,"matches_played","played","games")||null}; }
+    const wins=pick(mp,"wins"), losses=pick(mp,"losses");
+    const played=pick(mp,"matches_played","played","games") ?? (wins!=null&&losses!=null?wins+losses:null);
+    let raw=pick(mp,"win_rate","winrate","win_percentage","wins_pct");
+    if(raw!=null && raw>1) raw=raw/100;                       // API entrega 0..100
+    // win-rate regularizada (encolhe p/ 0.5 quando há poucos jogos)
+    let wr;
+    if(wins!=null && played){ wr=(wins + SHRINK_K*0.5)/(played + SHRINK_K); }
+    else if(raw!=null){ wr=raw; }
+    else wr=0.5;
+    maps[name]={
+      wr: Math.min(.95,Math.max(.05,wr)),
+      played: played!=null?Number(played):null,
+      permaban: !!pick(mp,"is_permaban","permaban")
+    };
   });
-  const rank=pick(team,"ranking","rank","world_ranking","position");
-  return { id, name:teamName(team), maps, rank };
+  return { id, name:teamName(team), maps, rank:null, points:null };
+}
+
+/* ----------------------------- rankings --------------------------------- */
+// /rankings traz rank + points por time, com ranking_type BO1/BO3.
+// Para o 1º MAPA o BO1 é o mais relevante (força em mapa único).
+let RANKINGS={};   // teamId -> {rank, points}
+async function loadRankings(){
+  for(const type of ["BO1","BO3"]){
+    try{
+      const r=await api("/rankings",{ranking_type:type},"Rankings ("+type+")...");
+      const arr=r.data||r;
+      (arr||[]).forEach(row=>{
+        const tid=pick(row,"team_id") ?? pick(pick(row,"team")||{},"id");
+        if(tid==null) return;
+        if(!RANKINGS[tid]) RANKINGS[tid]={};
+        RANKINGS[tid][type]={ rank:pick(row,"rank","ranking","position"), points:pick(row,"points","rating") };
+      });
+      break; // BO1 já basta; só cai pro BO3 se BO1 falhar
+    }catch(e){ /* sem plano ALL-STAR: segue sem ranking */ }
+  }
+}
+function applyRanking(s){
+  const r=RANKINGS[s.id];
+  if(r){ const x=r.BO1||r.BO3; if(x){ s.rank=x.rank ?? null; s.points=x.points ?? null; } }
+  return s;
 }
 
 /* ------------------------- modelo por mapa ------------------------------ */
@@ -288,16 +323,19 @@ function softmaxChoose(maps, scoreFn, temp){
 // vantagem do time T (s) sobre o oponente (o) no mapa m
 const adv = (s,o,m)=> wrOn(s,m)-wrOn(o,m);
 
+const isPermaban=(s,m)=> !!(s.maps[m] && s.maps[m].permaban);
 function simulateVeto(format, pool, A, B, firstIsA){
   // first = quem age primeiro; second = o outro
   const first = firstIsA?A:B, second = firstIsA?B:A;
   let remaining = pool.slice();
-  const banLowest = (team,opp)=> { // bane mapa de menor vantagem própria
-    const m = softmaxChoose(remaining, x=>-adv(team,opp,x), VETO_TEMP);
+  const banLowest = (team,opp)=> { // bane mapa de menor vantagem própria (+ permaban quase sempre)
+    const m = softmaxChoose(remaining, x=> -adv(team,opp,x) + (isPermaban(team,x)?1.0:0), VETO_TEMP);
     remaining = remaining.filter(x=>x!==m); return m;
   };
-  const pickBest = (team,opp)=> { // escolhe mapa de maior vantagem própria
-    const m = softmaxChoose(remaining, x=>adv(team,opp,x), VETO_TEMP);
+  const pickBest = (team,opp)=> { // escolhe mapa de maior vantagem (nunca o próprio permaban)
+    const cand = remaining.filter(x=>!isPermaban(team,x));
+    const from = cand.length?cand:remaining;
+    const m = softmaxChoose(from, x=>adv(team,opp,x), VETO_TEMP);
     remaining = remaining.filter(x=>x!==m); return m;
   };
 
@@ -336,7 +374,9 @@ function vetoDistribution(format, pool, A, B, firstMode){
 
 // rating geral só para decidir seed (quem escolhe 1º)
 function teamRating(s){
-  const vals=Object.values(s.maps).map(x=>x.wr);
+  // prioriza pontos do ranking oficial; senão usa win-rate média do pool
+  if(s.points!=null && !isNaN(s.points)) return Number(s.points);
+  const vals=Object.values(s.maps).filter(x=>!x.permaban).map(x=>x.wr);
   let r = vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0.5;
   if(s.rank!=null && !isNaN(s.rank)) r += Math.max(0,(50-Number(s.rank)))*0.004;
   return r;
@@ -379,12 +419,13 @@ function renderMatch(m, A, B, pred){
   const tourName=tour?(pick(tour,"name")||tour):"Partida CS2";
   const tm=pred.topMap;
 
+  const pb=(s,map)=> (s.maps[map]&&s.maps[map].permaban)?' <span style="color:var(--red)" title="permaban">⊘</span>':'';
   const rows = pred.detail.map(d=>`
     <tr>
       <td>${esc(d.map)}</td>
       <td><span class="mini" style="width:${Math.round(d.pFirst*80)}px"></span> ${pc(d.pFirst)}%</td>
-      <td>${pc(d.wrA)}%</td>
-      <td>${pc(d.wrB)}%</td>
+      <td>${pc(d.wrA)}%${pb(A,d.map)}</td>
+      <td>${pc(d.wrB)}%${pb(B,d.map)}</td>
       <td>${pc(d.pAwins)}%</td>
     </tr>`).join("");
 
@@ -441,11 +482,13 @@ async function run(){
     if(!matches.length){ setStatus("Nenhuma partida futura encontrada nesse intervalo."); return; }
     setStatus(`Encontradas ${matches.length} partidas. Coletando win-rate por mapa...`);
 
+    await loadRankings();    // 1 requisição; alimenta seed e força dos times
+
     const cache=new Map();
     async function maps(team){
       const id=teamId(team);
       if(cache.has(id)) return cache.get(id);
-      const s=await fetchTeamMaps(team); cache.set(id,s); return s;
+      const s=applyRanking(await fetchTeamMaps(team)); cache.set(id,s); return s;
     }
 
     let done=0;
