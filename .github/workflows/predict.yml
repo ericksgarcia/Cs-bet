@@ -3,6 +3,10 @@ name: Gerar previsões CS2 (HLTV)
 # Roda no GitHub (você está no celular): gera o index.html e publica no Pages.
 on:
   workflow_dispatch:            # botão "Run workflow" (dispara manualmente)
+  push:                         # roda automaticamente a cada push nestas branches
+    branches:
+      - main
+      - claude/sharp-knuth-efa4kq
   schedule:
     - cron: "0 */6 * * *"       # a cada 6 horas
 
