@@ -286,4 +286,11 @@ async function main(){
   log(`\n✓ index.html gerado com ${games.length} previsões.`);
 }
 
-main().catch(e=>{ console.error("\n✗ Falhou:", e.message); process.exit(1); });
+main().catch(e=>{
+  // Não sobrescreve o index.html: preserva as últimas previsões boas.
+  // (ex.: se a HLTV bloquear o runner do GitHub via Cloudflare, o site
+  //  publicado continua mostrando a última geração bem-sucedida.)
+  console.error("\n✗ Falhou:", e.message);
+  console.error("  index.html anterior preservado.");
+  process.exit(1);
+});

@@ -1,0 +1,71 @@
+name: Gerar previsões CS2 (HLTV)
+
+# Roda no GitHub (você está no celular): gera o index.html e publica no Pages.
+on:
+  workflow_dispatch:            # botão "Run workflow" (dispara manualmente)
+  schedule:
+    - cron: "0 */6 * * *"       # a cada 6 horas
+
+permissions:
+  contents: write               # para commitar o index.html gerado
+  pages: write                  # para publicar no GitHub Pages
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Gerar index.html a partir da HLTV
+        id: gen
+        continue-on-error: true     # se a HLTV bloquear (Cloudflare), não quebra o job
+        env:
+          NUM_GAMES: "8"
+          DELAY_MS: "4000"
+          FIRST_MODE: "seed"
+        run: node build.mjs
+
+      - name: Commitar index.html atualizado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- index.html; then
+            git add index.html
+            git commit -m "chore: atualiza previsões CS2 [skip ci]"
+            git push
+          else
+            echo "Sem mudanças no index.html."
+          fi
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload do site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "."               # publica a raiz (index.html, balldontlie.html, etc.)
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar no GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
