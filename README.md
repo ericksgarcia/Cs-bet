@@ -1,21 +1,49 @@
 # CS2 Bet — Previsão de vitória no 1º mapa
 
 Sistema que estima a **probabilidade de cada time vencer o primeiro mapa** das
-próximas partidas de Counter-Strike 2, **simulando o veto do torneio**. Usa a
-[BALLDONTLIE CS2 API](https://cs.balldontlie.io/) e gera uma página HTML
-(`index.html`) ordenada pelos jogos **mais próximos de acontecer**.
+próximas partidas de Counter-Strike 2, **simulando o veto do torneio**. Gera uma
+página HTML (`index.html`) ordenada pelos jogos **mais próximos de acontecer**.
 
 > ⚠️ Projeto educacional/estatístico. **Não é aconselhamento de apostas.**
 
-## Como usar
+## Duas fontes de dados disponíveis
 
-Abra o `index.html` no navegador (duplo clique ou via GitHub Pages). A API key já
-vem embutida e a análise roda automaticamente.
+| Fonte | Arquivo | Como funciona | Chave |
+|-------|---------|---------------|-------|
+| **HLTV** (recomendado) | `build.mjs` → `index.html` | Script Node faz scraping e **gera HTML estático** | Não precisa |
+| BALLDONTLIE CS2 | `balldontlie.html` | App que consulta a API **ao vivo no navegador** | Precisa (planos ALL-STAR/GOAT) |
 
-Controles: nº de jogos, dias à frente, e **quem escolhe primeiro** (melhor seed,
-azarão ou sorteio).
+### Por que a HLTV precisa de um build em Node (e não roda no navegador)?
 
-## A grande sacada: o 1º mapa vem do VETO, não é aleatório
+A HLTV **não tem API oficial**; usamos a lib não-oficial [`hltv` (gigobyte/HLTV)](https://github.com/gigobyte/HLTV),
+que faz *scraping*. O site usa **Cloudflare**, que bloqueia requisições feitas
+por navegador (CORS + anti-bot). Por isso um script Node coleta os dados e
+**escreve o `index.html`** já com as previsões calculadas — você abre o HTML sem
+nenhuma requisição nem chave.
+
+> ⚠️ A HLTV **bane IPs que abusam**. O `build.mjs` é sequencial e espaça as
+> requisições (`DELAY_MS`, padrão 3s). Não reduza demais nem aumente `NUM_GAMES`
+> sem necessidade.
+
+## Como gerar (HLTV)
+
+```bash
+npm install
+node build.mjs        # gera o index.html
+
+# opções:
+NUM_GAMES=8 DELAY_MS=3000 FIRST_MODE=seed node build.mjs
+```
+
+- `NUM_GAMES` — quantos jogos prever (padrão 8).
+- `DELAY_MS` — pausa entre requisições, anti-ban (padrão 3000).
+- `FIRST_MODE` — quem escolhe o 1º mapa: `seed` (melhor ranking), `underdog`, `coin`.
+
+Dados coletados da HLTV: `getMatches()` (próximos jogos + data), `getMatch()`
+(formato Bo1/3/5), `getTeamStats()` (win-rate por mapa) e `getTeamRanking()`
+(ranking mundial + pontos).
+
+## Pipeline e modelo
 
 Em CS2 o primeiro mapa é resultado do processo de **ban/pick** (veto), que depende
 do **formato** e de **quem escolhe primeiro**. O modelo reproduz isso:
@@ -103,9 +131,16 @@ mapeamento defensivo no `index.html`.
 ## Estrutura
 
 ```
-index.html      # app de previsão: UI + coleta + simulação de veto + modelo
-explorer.html   # diagnóstico: busca e inspeciona os dados crus da API
-README.md       # esta documentação
+build.mjs         # GERADOR (HLTV): scraping em Node -> escreve index.html
+index.html        # saída gerada com as previsões (placeholder até rodar build.mjs)
+package.json      # dependência 'hltv' e script de build
+balldontlie.html  # app alternativo: BALLDONTLIE CS2 ao vivo no navegador
+explorer.html     # diagnóstico dos endpoints da BALLDONTLIE
+README.md         # esta documentação
 ```
+
+> Nota: o pipeline com nomes de campos da OpenAPI descrito abaixo refere-se à
+> versão **BALLDONTLIE** (`balldontlie.html`). A versão **HLTV** usa o mesmo
+> modelo de veto, porém alimentado pelos métodos da lib `hltv`.
 
 Fonte de dados: [BALLDONTLIE CS2 API](https://cs.balldontlie.io/).

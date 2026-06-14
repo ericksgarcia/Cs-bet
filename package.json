@@ -1,0 +1,12 @@
+{
+  "name": "cs-bet",
+  "version": "1.0.0",
+  "description": "Previsao de vitoria no 1o mapa de CS2 usando dados da HLTV (lib nao-oficial). Gera index.html estatico.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "hltv": "^3.5.0"
+  }
+}
